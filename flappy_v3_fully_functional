@@ -1,0 +1,241 @@
+// include the library code:
+#include <LiquidCrystal.h>
+
+// initialize the library by associating any needed LCD interface pin
+// with the arduino pin number it is connected to
+const int rs = 8, en = 9, d4 = 3, d5 = 4, d6 = 5, d7 = 6;
+LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+
+int altitude;
+bool buttonlast = false;
+
+int steps[4] = {11, 3, 8, 0};
+int lengths[13] = {0, 0, 0, 0, 0, 0, 1, 3, 7, 14, 28, 24, 16}; //rotation of pipe widths
+int tiles[4][16] = {0}; //4 slots with 16 lines each
+int heights[5] = {8, 8, 8, 4, 1}; //0-8 (8 - empty)
+byte chart1[8];
+byte charb1[8];
+byte chart2[8];
+byte charb2[8];
+byte chart3[8];
+byte charb3[8];
+byte chart4[8];
+byte charb4[8];
+
+int byte_n;
+int timer = 20;
+int frames = 0;
+int delay_time = 25;
+int num_j; //limit 32767
+int score = -1;
+int i;
+int seed_last = 0;
+bool alive = true;
+
+
+void setup() {
+  Serial.begin(9600);
+  delay(1000);
+
+  pinMode (2, INPUT_PULLUP);
+  
+  // initialize LCD and set up the number of columns and rows:
+  lcd.begin(16, 2);
+
+  
+  Serial.println("end");
+}
+
+void gameover(String death) {
+  delay(400);
+  //Blink display 3 times
+  for(int i = 0; i < 3; i++) {
+    lcd.noDisplay();
+    delay(500);
+    lcd.display();
+    delay(500);
+  }
+  //Clear all
+  lcd.clear();
+
+  //Game Over
+  lcd.setCursor(1, 0);
+  lcd.print("Game Over");
+
+  //Print number of jumps
+  lcd.setCursor(1, 1);
+  lcd.print("death: ");
+  lcd.print(death);
+  alive = false;
+  
+}
+
+void loop() {
+  if (alive) {
+    //JUMPING
+    if (digitalRead(2) == 0) {
+      if (!buttonlast) {
+        num_j++;
+        if (timer > 20) {
+          timer = timer - 20;
+        }
+        buttonlast = true;
+      }
+    } else {
+      buttonlast = false;
+    }
+
+    for(int i = 0; i < 4; i++) {
+      for(int n = 0; n < 16; n++) {
+        tiles[i][n] = 0;
+      }
+    }
+
+    //making all 8 (4*2) tiles
+    for(int i = 0; i < 4; i++) {
+      if (heights[i] > 7) {
+        for(int n = 0; n < 16; n++) {
+          tiles[i][n] = 0;
+        }
+      } else {
+        tiles[i][0] = lengths[steps[i]];
+        tiles[i][15] = lengths[steps[i]];
+        for(int n = 1; n < 15; n++) {
+          if (heights[i] >= n) {
+            tiles[i][n] = lengths[steps[i]];
+          } else if (heights[i] + 7 < n) {
+            tiles[i][n] = lengths[steps[i]];
+          }
+        }
+      }
+    }
+    
+    //bird altitude
+    altitude = (timer - (timer % 10)) / 10;
+    
+    //THE BIRD
+    for(int i = 0; i < altitude + 3; i++) {
+      if (altitude == i) {
+        tiles[1][i] = tiles[1][i] + 4;
+      } else if (altitude + 1 == i) {
+        tiles[1][i] = tiles[1][i] + 10;
+      } else if (altitude + 2 == i) {
+        tiles[1][i] = tiles[1][i] + 12;
+      }
+    }
+    
+    //Pipe step count
+    if (timer % 10 == 0) {
+      for(int i = 0; i < 4; i++) {
+        steps[i]++;
+        if (steps[i] >= 13) {
+          steps[i] = 0;
+          heights[i] = heights[i + 1];
+        }
+      }
+      if (steps[1] == 12) {
+        score++;
+      }
+    }
+    
+    //rand height
+    if (heights[3] == heights[4]) {
+      if (seed_last != num_j) {
+        seed_last = num_j;
+        randomSeed(seed_last);
+      }
+      heights[4] = random(8);
+    }
+
+    //Creating specialChars 
+    for(int i = 0; i < 8; i++) {
+      chart1[i] = tiles[0][i];
+      charb1[i] = tiles[0][i + 8];
+      chart2[i] = tiles[1][i];
+      charb2[i] = tiles[1][i + 8];
+      chart3[i] = tiles[2][i];
+      charb3[i] = tiles[2][i + 8];
+      chart4[i] = tiles[3][i];
+      charb4[i] = tiles[3][i + 8];
+    }
+    lcd.createChar(0, chart1);
+    lcd.createChar(1, charb1);
+    lcd.createChar(2, chart2);
+    lcd.createChar(3, charb2);
+    lcd.createChar(4, chart3);
+    lcd.createChar(5, charb3);
+    lcd.createChar(6, chart4);
+    lcd.createChar(7, charb4);
+    
+    //Tiping out 1. time
+    byte_n = 0;
+    for(int i = 0; i < 4; i++) {
+      for(int n = 0; n < 2; n++) {
+        lcd.setCursor(i, n);
+        lcd.write(byte(byte_n));
+        byte_n++;
+      }
+    }
+
+    if (score < 0) {
+      i = 0;
+    } else {
+      i = score;
+    }
+    lcd.setCursor(8, 0);
+    lcd.print("Score:");
+    lcd.setCursor(8, 1);
+    lcd.print(i);
+
+    //if hits floor
+    if (altitude == 13) {
+      gameover("floor");
+    }
+
+    //hits wall
+    for (int i = 1; i < 15; i++) {
+      if(tiles[1][i] == 11) {
+        gameover("wall");
+      }
+    }
+
+    //hit pipe up/down
+    if ((tiles[1][altitude - 1] & 4) == 4) {
+      if (altitude != 0) {
+        gameover("up_pipe");
+      }
+    } else if (((tiles[1][altitude + 3] & 4) == 4) or ((tiles[1][altitude + 3] & 8) == 8)) {
+      if (altitude < 12) {
+        gameover("down_pipe");
+      }
+    }
+
+    //timer
+    timer++;
+    if(timer == 130) {
+      timer = 130;
+    }
+
+    frames++;
+    if ((delay_time > 10) and (frames % 60 == 0)) {
+      delay_time--;
+    }
+    delay(delay_time);
+  } else if (digitalRead(2) == 0) {
+    for(int i = 0; i < 3; i++) {
+      heights[i] = 8;
+    }
+    heights[3] = random(8);
+    heights[4] = random(8);
+    steps[0] = 11;
+    steps[1] = 3;
+    steps[2] = 8;
+    steps[3] = 0;
+    score = -1;
+    timer = 20;
+    frames = 0;
+    alive = true;
+    buttonlast = true;
+    lcd.clear();
+  }
+}
