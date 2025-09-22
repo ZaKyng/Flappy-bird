@@ -6,28 +6,29 @@
 const int rs = 8, en = 9, d4 = 3, d5 = 4, d6 = 5, d7 = 6;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
-int jump = 20;
 int altitude;
 bool buttonlast = false;
-int bird[16] = {0};
-byte flappyt[8] = {0,4,10,12,0,0,0,0};
-byte flappyb[8] = {0,0,0,0,0,0,0,0};
 
-int width;
-int steps[3] = {6, 11, 0};
-int lengths[15] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 3, 7, 14, 28, 24, 16}; //rotation of pipe widths
-int pipes[3][16] = {0}; //3 slots with 16 lines each
-int heights[4] = {8, 8, 8, 8}; //0-8 (8 - empty)
-byte pipet1[8];
-byte pipeb1[8];
-byte pipet2[8];
-byte pipeb2[8];
-byte pipet3[8];
-byte pipeb3[8];
+int steps[4] = {11, 3, 8, 0};
+int lengths[13] = {0, 0, 0, 0, 0, 0, 1, 3, 7, 14, 28, 24, 16}; //rotation of pipe widths
+int tiles[4][16] = {0}; //4 slots with 16 lines each
+int heights[5] = {8, 8, 8, 4, 1}; //0-8 (8 - empty)
+byte chart1[8];
+byte charb1[8];
+byte chart2[8];
+byte charb2[8];
+byte chart3[8];
+byte charb3[8];
+byte chart4[8];
+byte charb4[8];
 
 int byte_n;
 int timer = 20;
+int frames = 0;
+int delay_time = 25;
 int num_j; //limit 32767
+int score = -1;
+int i;
 int seed_last = 0;
 bool alive = true;
 
@@ -45,7 +46,7 @@ void setup() {
   Serial.println("end");
 }
 
-void gameover(int num_j) {
+void gameover(String death) {
   delay(400);
   //Blink display 3 times
   for(int i = 0; i < 3; i++) {
@@ -63,8 +64,8 @@ void gameover(int num_j) {
 
   //Print number of jumps
   lcd.setCursor(1, 1);
-  lcd.print("num_j: ");
-  lcd.print(num_j);
+  lcd.print("death: ");
+  lcd.print(death);
   alive = false;
   
 }
@@ -76,7 +77,7 @@ void loop() {
       if (!buttonlast) {
         num_j++;
         if (timer > 20) {
-          timer = timer - jump;
+          timer = timer - 20;
         }
         buttonlast = true;
       }
@@ -84,86 +85,91 @@ void loop() {
       buttonlast = false;
     }
 
-    //bird altitude
-    altitude = (timer - (timer % 10)) / 10;
-
-    //Craeting bird array
-    for(int i = 0; i < 16; i++) {
-      if(i <= altitude - 1) {
-        bird[i] = 0;
-      } else if(i <= altitude) {
-        bird[i] = 4;
-      }else if(i <= altitude + 1) {
-        bird[i] = 10;
-      }else if(i <= altitude + 2) {
-        bird[i] = 12;
-      }else {
-        bird[i] = 0;
+    for(int i = 0; i < 4; i++) {
+      for(int n = 0; n < 16; n++) {
+        tiles[i][n] = 0;
       }
     }
 
-    for(int i = 0; i < 3; i++) {
+    //making all 8 (4*2) tiles
+    for(int i = 0; i < 4; i++) {
       if (heights[i] > 7) {
         for(int n = 0; n < 16; n++) {
-          pipes[i][n] = 0;
+          tiles[i][n] = 0;
         }
       } else {
-        pipes[i][0] = lengths[steps[i]];
-        pipes[i][15] = lengths[steps[i]];
+        tiles[i][0] = lengths[steps[i]];
+        tiles[i][15] = lengths[steps[i]];
         for(int n = 1; n < 15; n++) {
           if (heights[i] >= n) {
-            pipes[i][n] = lengths[steps[i]];
+            tiles[i][n] = lengths[steps[i]];
           } else if (heights[i] + 7 < n) {
-            pipes[i][n] = lengths[steps[i]];
+            tiles[i][n] = lengths[steps[i]];
           }
         }
       }
     }
     
+    //bird altitude
+    altitude = (timer - (timer % 10)) / 10;
+    
+    //THE BIRD
+    for(int i = 0; i < altitude + 3; i++) {
+      if (altitude == i) {
+        tiles[1][i] = tiles[1][i] + 4;
+      } else if (altitude + 1 == i) {
+        tiles[1][i] = tiles[1][i] + 10;
+      } else if (altitude + 2 == i) {
+        tiles[1][i] = tiles[1][i] + 12;
+      }
+    }
+    
     //Pipe step count
     if (timer % 10 == 0) {
-      for(int i = 0; i < 3; i++) {
+      for(int i = 0; i < 4; i++) {
         steps[i]++;
-        if (steps[i] > 15) {
+        if (steps[i] >= 13) {
           steps[i] = 0;
           heights[i] = heights[i + 1];
         }
       }
+      if (steps[1] == 12) {
+        score++;
+      }
     }
     
     //rand height
-    if (heights[2] == heights[3]) {
+    if (heights[3] == heights[4]) {
       if (seed_last != num_j) {
         seed_last = num_j;
         randomSeed(seed_last);
       }
-      heights[3] = random(8);
+      heights[4] = random(8);
     }
 
-    //Creating specialChars 1. time
+    //Creating specialChars 
     for(int i = 0; i < 8; i++) {
-      flappyt[i] = bird[i];
-      flappyb[i] = bird[i + 8];
-      pipet1[i] = pipes[0][i];
-      pipeb1[i] = pipes[0][i + 8];
-      pipet2[i] = pipes[1][i];
-      pipeb2[i] = pipes[1][i + 8];
-      pipet3[i] = pipes[2][i];
-      pipeb3[i] = pipes[2][i + 8];
+      chart1[i] = tiles[0][i];
+      charb1[i] = tiles[0][i + 8];
+      chart2[i] = tiles[1][i];
+      charb2[i] = tiles[1][i + 8];
+      chart3[i] = tiles[2][i];
+      charb3[i] = tiles[2][i + 8];
+      chart4[i] = tiles[3][i];
+      charb4[i] = tiles[3][i + 8];
     }
-    lcd.createChar(0, flappyt);
-    lcd.createChar(1, flappyb);
-    lcd.createChar(2, pipet1);
-    lcd.createChar(3, pipeb1);
-    lcd.createChar(4, pipet2);
-    lcd.createChar(5, pipeb2);
-    lcd.createChar(6, pipet3);
-    lcd.createChar(7, pipeb3);
+    lcd.createChar(0, chart1);
+    lcd.createChar(1, charb1);
+    lcd.createChar(2, chart2);
+    lcd.createChar(3, charb2);
+    lcd.createChar(4, chart3);
+    lcd.createChar(5, charb3);
+    lcd.createChar(6, chart4);
+    lcd.createChar(7, charb4);
     
     //Tiping out 1. time
-    lcd.clear();
     byte_n = 0;
-    for(int i = 1; i < 5; i++) {
+    for(int i = 0; i < 4; i++) {
       for(int n = 0; n < 2; n++) {
         lcd.setCursor(i, n);
         lcd.write(byte(byte_n));
@@ -171,25 +177,65 @@ void loop() {
       }
     }
 
-    //if hits floor
-    if(altitude == 13) {
-      gameover(num_j);
+    if (score < 0) {
+      i = 0;
+    } else {
+      i = score;
     }
-    //timer 
-    //13 rotations of 10 * 50ms = 13 rotations of 500ms (0.5 seconds)
+    lcd.setCursor(8, 0);
+    lcd.print("Score:");
+    lcd.setCursor(8, 1);
+    lcd.print(i);
+
+    //if hits floor
+    if (altitude == 13) {
+      gameover("floor");
+    }
+
+    //hits wall
+    for (int i = 1; i < 15; i++) {
+      if(tiles[1][i] == 11) {
+        gameover("wall");
+      }
+    }
+
+    //hit pipe up/down
+    if ((tiles[1][altitude - 1] & 4) == 4) {
+      if (altitude != 0) {
+        gameover("up_pipe");
+      }
+    } else if (((tiles[1][altitude + 3] & 4) == 4) or ((tiles[1][altitude + 3] & 8) == 8)) {
+      if (altitude < 12) {
+        gameover("down_pipe");
+      }
+    }
+
+    //timer
     timer++;
-    if(timer > 130) {
+    if(timer == 130) {
       timer = 130;
     }
 
-    delay(20);
+    frames++;
+    if ((delay_time > 10) and (frames % 60 == 0)) {
+      delay_time--;
+    }
+    delay(delay_time);
   } else if (digitalRead(2) == 0) {
-    for(int i = 0; i < 4; i++) {
+    for(int i = 0; i < 3; i++) {
       heights[i] = 8;
     }
-    
-    timer = 0;
+    heights[3] = random(8);
+    heights[4] = random(8);
+    steps[0] = 11;
+    steps[1] = 3;
+    steps[2] = 8;
+    steps[3] = 0;
+    score = -1;
+    timer = 20;
+    frames = 0;
     alive = true;
     buttonlast = true;
+    lcd.clear();
   }
 }
